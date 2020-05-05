@@ -61,6 +61,9 @@
 #include "vmx.h"
 #include "x86.h"
 
+u32 exitCounter = 0;
+EXPORT_SYMBOL(exitCounter);
+
 MODULE_AUTHOR("Qumranet");
 MODULE_LICENSE("GPL");
 
@@ -5835,6 +5838,9 @@ void dump_vmcs(void)
 		       vmcs_read16(VIRTUAL_PROCESSOR_ID));
 }
 
+void add_exit_time_per_reason(u32 exit_reason, u64 time_taken);
+//EXPORT_SYMBOL(add_exit_time_per_reason);
+
 /*
  * The guest has exited.  See if we can fix it or if we need userspace
  * assistance.
@@ -5845,7 +5851,10 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu,
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	u32 exit_reason = vmx->exit_reason;
 	u32 vectoring_info = vmx->idt_vectoring_info;
-
+	u64 rdt_time;
+	int temp;
+        /*extern uint32_t num_exits;
+        num_exits++;*/
 	trace_kvm_exit(exit_reason, vcpu, KVM_ISA_VMX);
 
 	/*
@@ -5933,6 +5942,14 @@ static int vmx_handle_exit(struct kvm_vcpu *vcpu,
 
 	if (exit_reason >= kvm_vmx_max_exit_handlers)
 		goto unexpected_vmexit;
+	else if (exit_reason < kvm_vmx_max_exit_handlers && kvm_vmx_exit_handlers[exit_reason])
+	{
+		rdt_time = rdtsc();
+		temp = kvm_vmx_exit_handlers[exit_reason](vcpu);
+		rdt_time = rdtsc() - rdt_time;
+		add_exit_time_per_reason(exit_reason, rdt_time);
+		return temp;
+	}
 #ifdef CONFIG_RETPOLINE
 	if (exit_reason == EXIT_REASON_MSR_WRITE)
 		return kvm_emulate_wrmsr(vcpu);

@@ -24,6 +24,22 @@
 #include "trace.h"
 #include "pmu.h"
 
+static atomic_t exitCounter;
+static atomic64_t time;
+static atomic_t ExitCounterReason[62];
+static atomic64_t ExitCounterTimeReason[62];
+
+void add_exit_time_per_reason(u32 exit_reason, u64 time_taken)
+{
+	if (exit_reason >= 0 && exit_reason < 62)
+	{
+		atomic64_add(time_taken, &time);
+		atomic64_add(time_taken, &ExitCounterTimeReason[(int)exit_reason]);
+		atomic_inc(&exitCounter);
+		atomic_inc(&ExitCounterReason[(int)exit_reason]);
+	}
+}
+
 static u32 xstate_required_size(u64 xstate_bv, bool compacted)
 {
 	int feature_bit = 0;
@@ -1054,6 +1070,8 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 }
 EXPORT_SYMBOL_GPL(kvm_cpuid);
 
+//uint32_t num_exits;
+//EXPORT_SYMBOL(num_exits);
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
@@ -1063,7 +1081,46 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+	
+        if(eax == 0x4fffffff){
+            //eax = num_exits;
+	    eax = atomic_read(&exitCounter);
+        }
+	else if (eax == 0x4ffffffe)
+	{
+		ebx = ((atomic64_read(&time) >> 32));
+		ecx = ((atomic64_read(&time) & 0xFFFFFFFF));
+	}
+	else if (eax == 0x4ffffffd)
+	{
+		if ( ecx >= 0 && ecx < 62 && ecx != 35 && ecx != 38 && ecx != 42)
+		{
+			eax = atomic_read(&ExitCounterReason[(int)ecx]);
+		}
+		else
+		{
+			ebx = 0;
+			ecx = 0;
+			edx = 0xffffffff;
+		}
+	}
+	else if (eax == 0x4ffffffc)
+	{
+		if (ecx >= 0 && ecx < 62  && ecx != 35 && ecx != 38 && ecx != 42)
+		{
+			ebx = ((atomic64_read(&ExitCounterTimeReason[(int)ecx]) >> 32));
+			ecx = ((atomic64_read(&ExitCounterTimeReason[(int)ecx]) & 0xFFFFFFFF));
+		}
+		else if ( ecx == 35 || ecx == 38 || ecx == 42)
+		{
+			eax = 0;
+			ebx = 0;
+			ecx = 0;
+			edx = 0xffffffff;
+		}
+	}
+        else
+        kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
 	kvm_rax_write(vcpu, eax);
 	kvm_rbx_write(vcpu, ebx);
 	kvm_rcx_write(vcpu, ecx);
@@ -1071,3 +1128,4 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 	return kvm_skip_emulated_instruction(vcpu);
 }
 EXPORT_SYMBOL_GPL(kvm_emulate_cpuid);
+EXPORT_SYMBOL_GPL(add_exit_time_per_reason);
