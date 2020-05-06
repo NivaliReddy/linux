@@ -1070,13 +1070,13 @@ EXPORT_SYMBOL(each_exit_time);
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
+	uint32_t i;
 
 	if (cpuid_fault_enabled(vcpu) && !kvm_require_cpl(vcpu, 0))
 		return 1;
 
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	printk("eax is %d and ecx is %d",eax,ecx);
 	if(eax== 0x4FFFFFFF){
 		printk("eax = 0x4fffffff : Total no.of exits = %lld\n",atomic64_read(&num_exits));
 		eax=atomic64_read(&num_exits);
@@ -1142,18 +1142,18 @@ else{
 		}
 
 	}
-	/*else if(eax== 0x4ffffffb)
+	else if(eax == 0x4ffffffb)
 		{		
-		printk("In leaf 0x4ffffffb");
-		eax=ebx=ecx=edx=0xffffffff;
-		uint32_t i=0;
+		eax=ebx=ecx=edx=0;
+		i=0;
 		for(i=0;i<69;i++)
 		{
-			printk("Exit number %d and number of exits: %lld and number of cycles:%lld",i,atomic64_read(&exit_count[i]),atomic64_read(&each_exit_time[i]));
+			printk("Exit count for %d is %lld",i,atomic64_read(&exit_count[i]));
 		}
-	}*/
+		printk("Total no.of exits = %lld", atomic64_read(&num_exits));
+		printk("Assignment 4");
+	}
 	else{
-		//printk("Executing default handler");
 		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
 	}
 	kvm_rax_write(vcpu, eax);
